@@ -1,0 +1,161 @@
+.app {
+  max-width: 32rem;
+  margin: 0 auto;
+  padding: 2.5rem 1.25rem 3rem;
+}
+
+.header {
+  margin-bottom: 1.5rem;
+}
+
+.header h1 {
+  margin: 0;
+  font-size: 1.875rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+.subtitle {
+  margin: 0.35rem 0 0;
+  font-size: 0.9rem;
+  color: #64748b;
+}
+
+.card {
+  background: #fff;
+  border-radius: 1rem;
+  padding: 1.25rem;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06), 0 12px 40px rgba(15, 23, 42, 0.08);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+}
+
+.add-form {
+  display: flex;
+  gap: 0.6rem;
+  margin-bottom: 1rem;
+}
+
+.input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.65rem 0.85rem;
+  font: inherit;
+  border: 1px solid #cbd5e1;
+  border-radius: 0.65rem;
+  background: #f8fafc;
+  transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+}
+
+.input:focus {
+  outline: none;
+  border-color: #6366f1;
+  background: #fff;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+}
+
+.input:disabled {
+  opacity: 0.7;
+}
+
+.btn {
+  font: inherit;
+  font-weight: 600;
+  border-radius: 0.65rem;
+  border: none;
+  cursor: pointer;
+  padding: 0.65rem 1rem;
+  transition: opacity 0.15s, transform 0.1s;
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, #4f46e5, #6366f1);
+  color: #fff;
+}
+
+.btn-primary:not(:disabled):active {
+  transform: scale(0.98);
+}
+
+.btn-ghost {
+  background: transparent;
+  color: #64748b;
+  padding: 0.35rem 0.6rem;
+  font-size: 0.85rem;
+}
+
+.btn-ghost:hover:not(:disabled) {
+  color: #dc2626;
+  background: #fef2f2;
+}
+
+.banner {
+  margin: 0 0 1rem;
+  padding: 0.65rem 0.85rem;
+  border-radius: 0.5rem;
+  font-size: 0.9rem;
+}
+
+.banner.error {
+  background: #fef2f2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+}
+
+.muted {
+  color: #64748b;
+  font-size: 0.95rem;
+}
+
+.center {
+  text-align: center;
+  margin: 1.5rem 0;
+}
+
+.list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.65rem 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.row:last-child {
+  border-bottom: none;
+}
+
+.row.done .title {
+  text-decoration: line-through;
+  color: #94a3b8;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  cursor: pointer;
+  flex: 1;
+  min-width: 0;
+}
+
+.checkbox-label input {
+  width: 1.1rem;
+  height: 1.1rem;
+  accent-color: #4f46e5;
+  flex-shrink: 0;
+}
+
+.title {
+  word-break: break-word;
+}

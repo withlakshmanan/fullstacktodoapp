@@ -1,0 +1,24 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  font-family: "DM Sans", system-ui, -apple-system, sans-serif;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  color: #0f172a;
+  background: radial-gradient(1200px 600px at 10% -10%, #e0e7ff 0%, transparent 55%),
+    radial-gradient(900px 500px at 100% 0%, #cffafe 0%, transparent 50%),
+    #f8fafc;
+}
+
+#root {
+  min-height: 100vh;
+}
