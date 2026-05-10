@@ -21,6 +21,33 @@
   color: #64748b;
 }
 
+.tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.tab {
+  text-decoration: none;
+  color: #334155;
+  border: 1px solid #cbd5e1;
+  background: #ffffffb0;
+  padding: 0.4rem 0.8rem;
+  border-radius: 999px;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.tab.active {
+  color: #fff;
+  border-color: #4f46e5;
+  background: linear-gradient(135deg, #4f46e5, #6366f1);
+}
+
+.card h2 {
+  margin-top: 0;
+}
+
 .card {
   background: #fff;
   border-radius: 1rem;
