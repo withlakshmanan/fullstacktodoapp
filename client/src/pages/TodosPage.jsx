@@ -1,10 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-
-const api = (path, options) =>
-  fetch(path, {
-    headers: { "Content-Type": "application/json", ...options?.headers },
-    ...options,
-  });
+import { api } from "../api.js";
 
 export default function TodosPage() {
   const [todos, setTodos] = useState([]);
