@@ -1,8 +1,5 @@
-import { NavLink, Navigate, Route, Routes } from "react-router-dom";
+import { NavLink, Outlet } from "react-router-dom";
 import "./App.css";
-import AboutPage from "./pages/AboutPage.jsx";
-import HomePage from "./pages/HomePage.jsx";
-import TodosPage from "./pages/TodosPage.jsx";
 
 export default function App() {
   return (
@@ -24,12 +21,7 @@ export default function App() {
         </NavLink>
       </nav>
 
-      <Routes>
-        <Route path="/" element={<HomePage />} />
-        <Route path="/todos" element={<TodosPage />} />
-        <Route path="/about" element={<AboutPage />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+      <Outlet />
     </div>
   );
 }
