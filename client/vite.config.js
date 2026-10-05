@@ -9,7 +9,6 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, root);
 
   return {
-    // Static hosts must receive index.html for client routes such as /todos.
     appType: "spa",
     plugins: [react()],
     server: {
