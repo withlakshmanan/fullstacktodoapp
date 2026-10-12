@@ -29,14 +29,18 @@ async function main() {
   console.log(`Schema applied successfully on database "${ctx.db}" (role: ${ctx.role}).`);
 
   const { rows: tables } = await pool.query(
-    `SELECT schemaname, tablename
+    `SELECT tablename
      FROM pg_tables
-     WHERE schemaname = 'public' AND tablename = 'todos'`
+     WHERE schemaname = 'public' AND tablename IN ('todos', 'users')
+     ORDER BY tablename`
   );
-  if (tables.length === 0) {
-    console.warn("Could not find public.todos in pg_tables — check you are browsing the same DB.");
-  } else {
-    console.log("Verified: public.todos exists.");
+  const names = tables.map((row) => row.tablename);
+  for (const name of ["todos", "users"]) {
+    if (names.includes(name)) {
+      console.log(`Verified: public.${name} exists.`);
+    } else {
+      console.warn(`Could not find public.${name} in pg_tables — check you are browsing the same DB.`);
+    }
   }
 
   await pool.end();

@@ -6,8 +6,7 @@ export default function AboutPage() {
         Frontend: React + Vite. Backend: Node.js + Express. Database: PostgreSQL.
       </p>
       <p className="muted">
-        Use this starter to expand features such as authentication, filters, and user-specific
-        todo lists.
+        Sign in with email and password. Each account has its own todo list.
       </p>
     </section>
   );

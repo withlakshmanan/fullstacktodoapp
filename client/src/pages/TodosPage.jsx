@@ -1,25 +1,42 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../api.js";
+import { useAuth } from "../auth.jsx";
 
 export default function TodosPage() {
+  const { logout } = useAuth();
   const [todos, setTodos] = useState([]);
   const [title, setTitle] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [saving, setSaving] = useState(false);
 
+  const ensureOk = useCallback(
+    async (res, fallback) => {
+      if (res.status === 401) {
+        logout();
+        return false;
+      }
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || fallback);
+      }
+      return true;
+    },
+    [logout]
+  );
+
   const load = useCallback(async () => {
     setError(null);
     try {
       const res = await api("/api/todos");
-      if (!res.ok) throw new Error("Could not load todos");
+      if (!(await ensureOk(res, "Could not load todos"))) return;
       setTodos(await res.json());
     } catch (e) {
       setError(e.message ?? "Something went wrong");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [ensureOk]);
 
   useEffect(() => {
     load();
@@ -36,10 +53,7 @@ export default function TodosPage() {
         method: "POST",
         body: JSON.stringify({ title: trimmed }),
       });
-      if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body.error || "Could not add todo");
-      }
+      if (!(await ensureOk(res, "Could not add todo"))) return;
       const created = await res.json();
       setTodos((prev) => [...prev, created]);
       setTitle("");
@@ -57,7 +71,7 @@ export default function TodosPage() {
         method: "PATCH",
         body: JSON.stringify({ completed: !todo.completed }),
       });
-      if (!res.ok) throw new Error("Could not update todo");
+      if (!(await ensureOk(res, "Could not update todo"))) return;
       const updated = await res.json();
       setTodos((prev) => prev.map((t) => (t.id === updated.id ? updated : t)));
     } catch (e) {
@@ -69,7 +83,7 @@ export default function TodosPage() {
     setError(null);
     try {
       const res = await api(`/api/todos/${id}`, { method: "DELETE" });
-      if (!res.ok && res.status !== 204) throw new Error("Could not delete todo");
+      if (!(await ensureOk(res, "Could not delete todo"))) return;
       setTodos((prev) => prev.filter((t) => t.id !== id));
     } catch (e) {
       setError(e.message ?? "Something went wrong");

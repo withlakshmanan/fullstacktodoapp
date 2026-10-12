@@ -1,6 +1,12 @@
 import cors from "cors";
 import express from "express";
+import { checkPassword, hashPassword, publicUser, requireAuth, signToken, validateCredentials } from "./auth.js";
 import { pool } from "./db.js";
+
+if (!process.env.JWT_SECRET) {
+  console.error("JWT_SECRET is not set. Add it to server/.env.");
+  process.exit(1);
+}
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3001;
@@ -12,12 +18,87 @@ app.get("/api/health", (_req, res) => {
   res.json({ ok: true });
 });
 
-app.get("/api/todos", async (_req, res) => {
+app.post("/api/auth/register", async (req, res) => {
+  const parsed = validateCredentials(req.body?.email, req.body?.password);
+  if (parsed.error) {
+    return res.status(400).json({ error: parsed.error });
+  }
+
+  const passwordHash = await hashPassword(parsed.password);
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    await client.query("LOCK TABLE users IN EXCLUSIVE MODE");
+    const { rows: counts } = await client.query(`SELECT COUNT(*)::int AS count FROM users`);
+    const { rows } = await client.query(
+      `INSERT INTO users (email, password_hash)
+       VALUES ($1, $2)
+       RETURNING id, email`,
+      [parsed.email, passwordHash]
+    );
+    if (counts[0].count === 0) {
+      await client.query(`UPDATE todos SET user_id = $1 WHERE user_id IS NULL`, [rows[0].id]);
+    }
+    await client.query("COMMIT");
+    const user = publicUser(rows[0]);
+    res.status(201).json({ token: signToken(user), user });
+  } catch (err) {
+    await client.query("ROLLBACK");
+    if (err.code === "23505") {
+      return res.status(409).json({ error: "An account with that email already exists" });
+    }
+    console.error(err);
+    res.status(500).json({ error: "Failed to create account" });
+  } finally {
+    client.release();
+  }
+});
+
+app.post("/api/auth/login", async (req, res) => {
+  const parsed = validateCredentials(req.body?.email, req.body?.password);
+  if (parsed.error) {
+    return res.status(400).json({ error: parsed.error });
+  }
+
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, email, password_hash FROM users WHERE email = $1`,
+      [parsed.email]
+    );
+    const row = rows[0];
+    const ok = await checkPassword(parsed.password, row?.password_hash);
+    if (!row || !ok) {
+      return res.status(401).json({ error: "Invalid email or password" });
+    }
+    const user = publicUser(row);
+    res.json({ token: signToken(user), user });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to log in" });
+  }
+});
+
+app.get("/api/auth/me", requireAuth, async (req, res) => {
+  try {
+    const { rows } = await pool.query(`SELECT id, email FROM users WHERE id = $1`, [req.user.id]);
+    if (!rows[0]) {
+      return res.status(401).json({ error: "Authentication required" });
+    }
+    res.json(publicUser(rows[0]));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to load account" });
+  }
+});
+
+app.get("/api/todos", requireAuth, async (req, res) => {
   try {
     const { rows } = await pool.query(
       `SELECT id, title, completed, created_at AS "createdAt"
        FROM todos
-       ORDER BY created_at ASC, id ASC`
+       WHERE user_id = $1
+       ORDER BY created_at ASC, id ASC`,
+      [req.user.id]
     );
     res.json(rows);
   } catch (err) {
@@ -26,16 +107,16 @@ app.get("/api/todos", async (_req, res) => {
   }
 });
 
-app.post("/api/todos", async (req, res) => {
+app.post("/api/todos", requireAuth, async (req, res) => {
   const title = typeof req.body?.title === "string" ? req.body.title.trim() : "";
   if (!title) {
     return res.status(400).json({ error: "title is required" });
   }
   try {
     const { rows } = await pool.query(
-      `INSERT INTO todos (title) VALUES ($1)
+      `INSERT INTO todos (title, user_id) VALUES ($1, $2)
        RETURNING id, title, completed, created_at AS "createdAt"`,
-      [title]
+      [title, req.user.id]
     );
     res.status(201).json(rows[0]);
   } catch (err) {
@@ -44,7 +125,7 @@ app.post("/api/todos", async (req, res) => {
   }
 });
 
-app.patch("/api/todos/:id", async (req, res) => {
+app.patch("/api/todos/:id", requireAuth, async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id) || id < 1) {
     return res.status(400).json({ error: "invalid id" });
@@ -74,12 +155,12 @@ app.patch("/api/todos/:id", async (req, res) => {
     return res.status(400).json({ error: "no fields to update" });
   }
 
-  values.push(id);
+  values.push(id, req.user.id);
 
   try {
     const { rows } = await pool.query(
       `UPDATE todos SET ${updates.join(", ")}
-       WHERE id = $${i}
+       WHERE id = $${i++} AND user_id = $${i}
        RETURNING id, title, completed, created_at AS "createdAt"`,
       values
     );
@@ -93,13 +174,16 @@ app.patch("/api/todos/:id", async (req, res) => {
   }
 });
 
-app.delete("/api/todos/:id", async (req, res) => {
+app.delete("/api/todos/:id", requireAuth, async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isInteger(id) || id < 1) {
     return res.status(400).json({ error: "invalid id" });
   }
   try {
-    const { rowCount } = await pool.query(`DELETE FROM todos WHERE id = $1`, [id]);
+    const { rowCount } = await pool.query(`DELETE FROM todos WHERE id = $1 AND user_id = $2`, [
+      id,
+      req.user.id,
+    ]);
     if (!rowCount) {
       return res.status(404).json({ error: "not found" });
     }
