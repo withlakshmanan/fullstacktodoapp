@@ -5,6 +5,7 @@ import { useAuth } from "../auth.jsx";
 export default function TodosPage() {
   const { logout } = useAuth();
   const [todos, setTodos] = useState([]);
+  const [notes, setNotes] = useState([]);
   const [title, setTitle] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -25,22 +26,40 @@ export default function TodosPage() {
     [logout]
   );
 
+  const loadNotes = useCallback(async () => {
+    const res = await api("/api/notifications");
+    if (res.status === 401) {
+      logout();
+      return;
+    }
+    if (!res.ok) return;
+    setNotes(await res.json());
+  }, [logout]);
+
   const load = useCallback(async () => {
     setError(null);
     try {
       const res = await api("/api/todos");
       if (!(await ensureOk(res, "Could not load todos"))) return;
       setTodos(await res.json());
+      await loadNotes();
     } catch (e) {
       setError(e.message ?? "Something went wrong");
     } finally {
       setLoading(false);
     }
-  }, [ensureOk]);
+  }, [ensureOk, loadNotes]);
 
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      loadNotes().catch(() => {});
+    }, 3000);
+    return () => clearInterval(timer);
+  }, [loadNotes]);
 
   async function handleAdd(e) {
     e.preventDefault();
@@ -132,6 +151,28 @@ export default function TodosPage() {
           ))}
         </ul>
       )}
+
+      <section className="activity" aria-label="Queue activity">
+        <h2>Queue activity</h2>
+        <p className="muted">Written by the background worker, including delayed reminders.</p>
+        {notes.length === 0 ? (
+          <p className="muted">Nothing yet. Add a todo or wait for a reminder.</p>
+        ) : (
+          <ul className="list">
+            {notes.map((note) => (
+              <li key={note.id} className="activity-item">
+                <span>{note.message}</span>
+                <time className="activity-time" dateTime={note.createdAt}>
+                  {new Date(note.createdAt).toLocaleTimeString([], {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </time>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
     </main>
   );
 }

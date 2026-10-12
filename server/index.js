@@ -2,6 +2,8 @@ import cors from "cors";
 import express from "express";
 import { checkPassword, hashPassword, publicUser, requireAuth, signToken, validateCredentials } from "./auth.js";
 import { pool } from "./db.js";
+import { jobHandlers } from "./jobs.js";
+import { enqueue, REMINDER_DELAY_MS, startWorker } from "./queue.js";
 
 if (!process.env.JWT_SECRET) {
   console.error("JWT_SECRET is not set. Add it to server/.env.");
@@ -39,6 +41,11 @@ app.post("/api/auth/register", async (req, res) => {
     if (counts[0].count === 0) {
       await client.query(`UPDATE todos SET user_id = $1 WHERE user_id IS NULL`, [rows[0].id]);
     }
+    await enqueue(client, {
+      queue: "notifications",
+      name: "user.registered",
+      payload: { userId: rows[0].id, email: rows[0].email },
+    });
     await client.query("COMMIT");
     const user = publicUser(rows[0]);
     res.status(201).json({ token: signToken(user), user });
@@ -112,16 +119,34 @@ app.post("/api/todos", requireAuth, async (req, res) => {
   if (!title) {
     return res.status(400).json({ error: "title is required" });
   }
+  const client = await pool.connect();
   try {
-    const { rows } = await pool.query(
+    await client.query("BEGIN");
+    const { rows } = await client.query(
       `INSERT INTO todos (title, user_id) VALUES ($1, $2)
        RETURNING id, title, completed, created_at AS "createdAt"`,
       [title, req.user.id]
     );
-    res.status(201).json(rows[0]);
+    const todo = rows[0];
+    await enqueue(client, {
+      queue: "notifications",
+      name: "todo.created",
+      payload: { userId: req.user.id, todoId: todo.id, title: todo.title },
+    });
+    await enqueue(client, {
+      queue: "reminders",
+      name: "todo.due",
+      payload: { userId: req.user.id, todoId: todo.id },
+      runAt: new Date(Date.now() + REMINDER_DELAY_MS),
+    });
+    await client.query("COMMIT");
+    res.status(201).json(todo);
   } catch (err) {
+    await client.query("ROLLBACK");
     console.error(err);
     res.status(500).json({ error: "Failed to create todo" });
+  } finally {
+    client.release();
   }
 });
 
@@ -157,20 +182,40 @@ app.patch("/api/todos/:id", requireAuth, async (req, res) => {
 
   values.push(id, req.user.id);
 
+  const client = await pool.connect();
   try {
-    const { rows } = await pool.query(
+    await client.query("BEGIN");
+    const { rows: existing } = await client.query(
+      `SELECT id, completed FROM todos WHERE id = $1 AND user_id = $2 FOR UPDATE`,
+      [id, req.user.id]
+    );
+    if (!existing[0]) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "not found" });
+    }
+
+    const { rows } = await client.query(
       `UPDATE todos SET ${updates.join(", ")}
        WHERE id = $${i++} AND user_id = $${i}
        RETURNING id, title, completed, created_at AS "createdAt"`,
       values
     );
-    if (!rows[0]) {
-      return res.status(404).json({ error: "not found" });
+    const todo = rows[0];
+    if (completed !== undefined && completed !== existing[0].completed) {
+      await enqueue(client, {
+        queue: "notifications",
+        name: todo.completed ? "todo.completed" : "todo.reopened",
+        payload: { userId: req.user.id, todoId: todo.id, title: todo.title },
+      });
     }
-    res.json(rows[0]);
+    await client.query("COMMIT");
+    res.json(todo);
   } catch (err) {
+    await client.query("ROLLBACK");
     console.error(err);
     res.status(500).json({ error: "Failed to update todo" });
+  } finally {
+    client.release();
   }
 });
 
@@ -179,20 +224,51 @@ app.delete("/api/todos/:id", requireAuth, async (req, res) => {
   if (!Number.isInteger(id) || id < 1) {
     return res.status(400).json({ error: "invalid id" });
   }
+  const client = await pool.connect();
   try {
-    const { rowCount } = await pool.query(`DELETE FROM todos WHERE id = $1 AND user_id = $2`, [
-      id,
-      req.user.id,
-    ]);
-    if (!rowCount) {
+    await client.query("BEGIN");
+    const { rows } = await client.query(
+      `DELETE FROM todos WHERE id = $1 AND user_id = $2 RETURNING id, title`,
+      [id, req.user.id]
+    );
+    if (!rows[0]) {
+      await client.query("ROLLBACK");
       return res.status(404).json({ error: "not found" });
     }
+    await enqueue(client, {
+      queue: "notifications",
+      name: "todo.deleted",
+      payload: { userId: req.user.id, todoId: rows[0].id, title: rows[0].title },
+    });
+    await client.query("COMMIT");
     res.status(204).send();
   } catch (err) {
+    await client.query("ROLLBACK");
     console.error(err);
     res.status(500).json({ error: "Failed to delete todo" });
+  } finally {
+    client.release();
   }
 });
+
+app.get("/api/notifications", requireAuth, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      `SELECT id, kind, message, created_at AS "createdAt"
+       FROM notifications
+       WHERE user_id = $1
+       ORDER BY created_at DESC, id DESC
+       LIMIT 20`,
+      [req.user.id]
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to load notifications" });
+  }
+});
+
+startWorker(pool, jobHandlers);
 
 app.listen(PORT, () => {
   console.log(`API listening on http://localhost:${PORT}`);
